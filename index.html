@@ -80,7 +80,7 @@
     <div class="content"><div id="status">Initializing…</div></div>
     <div class="footer">
       <div class="user-info">Your ID: <span id="my-id">…</span></div>
-      <button id="ptt-btn" disabled>Push-to-Talk</button>
+      <button id="mute-btn" disabled>🔇</button>
     </div>
   </div>
 
@@ -89,13 +89,12 @@
   <script>
     const statusEl = document.getElementById('status');
     const myIdEl   = document.getElementById('my-id');
-    const pttBtn   = document.getElementById('ptt-btn');
+    const muteBtn  = document.getElementById('mute-btn');
     const channelItems = document.querySelectorAll('.channel-item');
     const remoteAudio = document.getElementById('remote-audio');
 
     let peer, localStream, currentCall;
 
-    // get mic + noise cancel
     async function setupAudio() {
       const raw = await navigator.mediaDevices.getUserMedia({
         audio: { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
@@ -110,76 +109,69 @@
       return dest.stream;
     }
 
-    // init PeerJS
     async function init() {
       try {
         localStream = await setupAudio();
-      } catch(e) {
+      } catch (e) {
         statusEl.textContent = 'Mic access denied';
         return;
       }
       peer = new Peer();
       peer.on('open', id => {
         myIdEl.textContent = id;
-        statusEl.textContent = 'Click “# General” to connect';
+        statusEl.textContent = 'Click "# General" to connect';
       });
       peer.on('call', call => answer(call));
       peer.on('error', err => statusEl.textContent = 'Peer error');
     }
 
-    // answer incoming
     function answer(call) {
       if (currentCall) currentCall.close();
       currentCall = call;
-      call.answer(localStream);
+      currentCall.answer(localStream);
       hookCall();
       highlightChannel('general');
     }
 
-    // make outgoing
     function callPeer(id) {
       if (currentCall) currentCall.close();
       currentCall = peer.call(id, localStream);
       hookCall();
     }
 
-    // common handlers
     function hookCall() {
       statusEl.textContent = 'In call with ' + currentCall.peer;
-      pttBtn.disabled = false;
-      currentCall.on('stream', s=> remoteAudio.srcObject = s);
+      muteBtn.disabled = false;
+      muteBtn.textContent = '🔈';
+      currentCall.on('stream', s => remoteAudio.srcObject = s);
       currentCall.on('close', endCall);
       currentCall.on('error', endCall);
     }
 
     function endCall() {
       statusEl.textContent = 'Call ended';
-      pttBtn.disabled = true;
+      muteBtn.disabled = true;
     }
 
-    // UI: clicking channel
     channelItems.forEach(el => {
-      el.onclick = async () => {
+      el.onclick = () => {
         highlightChannel(el.dataset.room);
         const friendId = prompt("Enter your friend's ID");
         if (friendId) callPeer(friendId.trim());
       };
     });
+
     function highlightChannel(room) {
-      channelItems.forEach(x=>x.classList.toggle('active', x.dataset.room===room));
+      channelItems.forEach(x => x.classList.toggle('active', x.dataset.room === room));
       document.querySelector('.header').textContent = '# ' + room.charAt(0).toUpperCase() + room.slice(1);
     }
 
-    // push-to-talk
-    function setTalking(on) {
+    muteBtn.addEventListener('click', () => {
       if (!localStream) return;
-      localStream.getAudioTracks().forEach(t=>t.enabled = on);
-      pttBtn.textContent = on ? 'Release to Mute' : 'Push-to-Talk';
-    }
-    document.body.onkeydown = e=> e.code==='Space' && setTalking(true);
-    document.body.onkeyup   = e=> e.code==='Space' && setTalking(false);
-    pttBtn.onmousedown = ()=> setTalking(true);
-    pttBtn.onmouseup   = ()=> setTalking(false);
+      const enabled = localStream.getAudioTracks()[0].enabled;
+      localStream.getAudioTracks().forEach(t => t.enabled = !enabled);
+      muteBtn.textContent = enabled ? '🔇' : '🔈';
+    });
 
     init();
   </script>
